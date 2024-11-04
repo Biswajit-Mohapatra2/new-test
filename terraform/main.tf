@@ -55,7 +55,7 @@ resource "aws_security_group" "example" {
 # Create a VPC
 resource "aws_vpc" "example" {
   cidr_block           = "10.0.0.0/16"
-  enable_dns_hostnames = true  # Enable DNS hostnames for the VPC
+  enable_dns_hostnames = true
 }
 
 # Create an Internet Gateway
@@ -95,19 +95,16 @@ resource "aws_eip" "example" {
 
 # Create a Network Interface
 resource "aws_network_interface" "example" {
-  subnet_id = aws_subnet.example.id
-  private_ips = ["10.0.1.5"]
-  security_groups = [
-    aws_security_group.example.id
-  ]
+  subnet_id       = aws_subnet.example.id
+  private_ips     = ["10.0.1.5"]
+  security_groups = [aws_security_group.example.id]
 }
 
-# EC2 Instance creation
+# EC2 Instance creation without subnet_id to resolve conflict
 resource "aws_instance" "example" {
   ami           = var.ami_id
   instance_type = var.instance_type
   key_name      = var.key_name
-  subnet_id     = aws_subnet.example.id
 
   network_interface {
     device_index         = 0
