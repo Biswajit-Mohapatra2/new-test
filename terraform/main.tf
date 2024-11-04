@@ -1,7 +1,9 @@
+# Provider configuration
 provider "aws" {
   region = "us-east-1"
 }
 
+# Variables for configuration
 variable "region" {
   default = "us-east-1"
 }
@@ -89,8 +91,7 @@ resource "aws_route_table_association" "example" {
 
 # Create a public IP for the instance
 resource "aws_eip" "example" {
-  instance = aws_instance.example.id
-  vpc      = true
+  vpc = true
 }
 
 # Create a Network Interface
@@ -100,12 +101,13 @@ resource "aws_network_interface" "example" {
   security_groups = [aws_security_group.example.id]
 }
 
-# EC2 Instance creation without subnet_id to resolve conflict
+# EC2 Instance creation
 resource "aws_instance" "example" {
   ami           = var.ami_id
   instance_type = var.instance_type
   key_name      = var.key_name
 
+  # Attach the network interface instead of using subnet_id directly
   network_interface {
     device_index         = 0
     network_interface_id = aws_network_interface.example.id
@@ -121,40 +123,10 @@ resource "aws_instance" "example" {
   }
 }
 
-# Add more detailed outputs
-output "instance_id" {
-  description = "ID of the EC2 instance"
-  value       = aws_instance.example.id
-}
-
-output "instance_public_ip" {
-  description = "Public IP address of the EC2 instance"
-  value       = aws_eip.example.public_ip
-}
-
-output "instance_private_ip" {
-  description = "Private IP address of the EC2 instance"
-  value       = aws_instance.example.private_ip
-}
-
-output "instance_private_dns" {
-  description = "Private DNS of the EC2 instance"
-  value       = aws_instance.example.private_dns
-}
-
-output "instance_public_dns" {
-  description = "Public DNS of the EC2 instance"
-  value       = aws_instance.example.public_dns
-}
-
+# Outputs for connection and networking
 output "ssh_connection_string" {
   description = "SSH connection string to connect to the instance"
   value       = "ssh -i ${var.key_name}.pem ${var.admin_username}@${aws_eip.example.public_ip}"
-}
-
-output "instance_state" {
-  description = "Current state of the instance"
-  value       = aws_instance.example.instance_state
 }
 
 output "vpc_id" {
