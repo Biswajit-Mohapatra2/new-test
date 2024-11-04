@@ -4,9 +4,9 @@ pipeline {
     environment {
         EC2_USER = 'ubuntu'
         EC2_HOST = '3.111.41.22'
-        APP_PATH = '/home/ubuntu/app3'
+        APP_PATH = '/home/ubuntu/app4'
         GIT_REPO = 'https://github.com/Biswajit-Mohapatra2/new-test.git'
-        PPK_KEY = '"C:\\Users\\BiswajitMohapatra\\Downloads\\new2jenkins.ppk"'
+        PPK_KEY = 'C:\\Users\\BiswajitMohapatra\\Downloads\\new2jenkins.ppk'
     }
     
     stages {
