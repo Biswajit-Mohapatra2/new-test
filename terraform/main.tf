@@ -1,9 +1,9 @@
 # Configure AWS Provider
 provider "aws" {
-  region = "ap-south-1"  # Change this to your desired region
+  region = "ap-south-1"  # Mumbai region
 }
 
-# Create VPC (Best practice to launch EC2 in a VPC)
+# Create VPC
 resource "aws_vpc" "main" {
   cidr_block           = "10.0.0.0/16"
   enable_dns_hostnames = true
@@ -18,7 +18,7 @@ resource "aws_vpc" "main" {
 resource "aws_subnet" "public" {
   vpc_id                  = aws_vpc.main.id
   cidr_block              = "10.0.1.0/24"
-  availability_zone       = "us-west-2a"  # Change this according to your region
+  availability_zone       = "ap-south-1a"  # Mumbai AZ
   map_public_ip_on_launch = true
 
   tags = {
@@ -83,7 +83,7 @@ resource "aws_security_group" "allow_ssh" {
 
 # Create EC2 Instance
 resource "aws_instance" "web_server" {
-  ami           = "ami-04a37924ffe27da53"  # Amazon Linux 2 AMI ID (changes by region)
+  ami           = "ami-04a37924ffe27da53"  # Amazon Linux 2023 AMI for ap-south-1
   instance_type = "t2.micro"
   
   subnet_id                   = aws_subnet.public.id
