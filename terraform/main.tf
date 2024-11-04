@@ -22,8 +22,8 @@ variable "admin_username" {
 }
 
 variable "ami_id" {
-  description = "AMI ID for Ubuntu 20.04 in ap-south-1 (can be changed based on region)"
-  default     = "ami-0e8b1c0e4f68d6e6b" # Ubuntu 20.04 AMI in ap-south-1
+  description = "AMI ID for Amazon linux in ap-south-1 (can be changed based on region)"
+  default     = "ami-04a37924ffe27da53" # Ubuntu 20.04 AMI in ap-south-1
 }
 
 variable "action" {
