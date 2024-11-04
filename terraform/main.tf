@@ -1,11 +1,11 @@
 # Provider configuration
 provider "aws" {
-  region = "us-east-1"
+  region = "ap-south-1"
 }
 
 # Variables for configuration
 variable "region" {
-  default = "us-east-1"
+  default = "ap-south-1"
 }
 
 variable "instance_type" {
@@ -22,8 +22,8 @@ variable "admin_username" {
 }
 
 variable "ami_id" {
-  description = "AMI ID for Ubuntu 20.04 in us-east-1 (can be changed based on region)"
-  default     = "ami-04a37924ffe27da53" # Ubuntu 20.04 AMI in us-east-1
+  description = "AMI ID for Ubuntu 20.04 in ap-south-1 (can be changed based on region)"
+  default     = "ami-0e8b1c0e4f68d6e6b" # Ubuntu 20.04 AMI in ap-south-1
 }
 
 variable "action" {
@@ -69,7 +69,7 @@ resource "aws_internet_gateway" "example" {
 resource "aws_subnet" "example" {
   vpc_id                  = aws_vpc.example.id
   cidr_block              = "10.0.1.0/24"
-  availability_zone       = "us-east-1a"
+  availability_zone       = "ap-south-1a"
   map_public_ip_on_launch = true
 }
 
@@ -91,27 +91,17 @@ resource "aws_route_table_association" "example" {
 
 # Create a public IP for the instance
 resource "aws_eip" "example" {
-  vpc = true
-}
-
-# Create a Network Interface
-resource "aws_network_interface" "example" {
-  subnet_id       = aws_subnet.example.id
-  private_ips     = ["10.0.1.5"]
-  security_groups = [aws_security_group.example.id]
+  instance = aws_instance.example.id
+  vpc      = true
 }
 
 # EC2 Instance creation
 resource "aws_instance" "example" {
-  ami           = var.ami_id
-  instance_type = var.instance_type
-  key_name      = var.key_name
-
-  # Attach the network interface instead of using subnet_id directly
-  network_interface {
-    device_index         = 0
-    network_interface_id = aws_network_interface.example.id
-  }
+  ami                    = var.ami_id
+  instance_type         = var.instance_type
+  key_name              = var.key_name
+  subnet_id             = aws_subnet.example.id
+  security_groups       = [aws_security_group.example.name]
 
   root_block_device {
     volume_size = 20
