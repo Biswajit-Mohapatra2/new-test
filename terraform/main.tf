@@ -1,9 +1,7 @@
-# Provider configuration
 provider "aws" {
   region = "ap-south-1"
 }
 
-# Variables for configuration
 variable "region" {
   default = "ap-south-1"
 }
@@ -22,8 +20,8 @@ variable "admin_username" {
 }
 
 variable "ami_id" {
-  description = "AMI ID for Amazon linux in ap-south-1 (can be changed based on region)"
-  default     = "ami-04a37924ffe27da53" # Ubuntu 20.04 AMI in ap-south-1
+  description = "AMI ID for Ubuntu 20.04 in ap-south-1 (can be changed based on region)"
+  default     = "ami-0c55b159cbfafe1f0" # Replace with the valid AMI ID you found
 }
 
 variable "action" {
@@ -95,13 +93,24 @@ resource "aws_eip" "example" {
   vpc      = true
 }
 
+# Create a Network Interface
+resource "aws_network_interface" "example" {
+  subnet_id       = aws_subnet.example.id
+  private_ips     = ["10.0.1.5"]
+  security_groups = [aws_security_group.example.id]
+}
+
 # EC2 Instance creation
 resource "aws_instance" "example" {
-  ami                    = var.ami_id
-  instance_type         = var.instance_type
-  key_name              = var.key_name
-  subnet_id             = aws_subnet.example.id
-  security_groups       = [aws_security_group.example.name]
+  ami           = var.ami_id
+  instance_type = var.instance_type
+  key_name      = var.key_name
+
+  # Use the network interface for this instance
+  network_interface {
+    device_index         = 0
+    network_interface_id = aws_network_interface.example.id
+  }
 
   root_block_device {
     volume_size = 20
@@ -113,10 +122,40 @@ resource "aws_instance" "example" {
   }
 }
 
-# Outputs for connection and networking
+# Add more detailed outputs
+output "instance_id" {
+  description = "ID of the EC2 instance"
+  value       = aws_instance.example.id
+}
+
+output "instance_public_ip" {
+  description = "Public IP address of the EC2 instance"
+  value       = aws_eip.example.public_ip
+}
+
+output "instance_private_ip" {
+  description = "Private IP address of the EC2 instance"
+  value       = aws_instance.example.private_ip
+}
+
+output "instance_private_dns" {
+  description = "Private DNS of the EC2 instance"
+  value       = aws_instance.example.private_dns
+}
+
+output "instance_public_dns" {
+  description = "Public DNS of the EC2 instance"
+  value       = aws_instance.example.public_dns
+}
+
 output "ssh_connection_string" {
   description = "SSH connection string to connect to the instance"
   value       = "ssh -i ${var.key_name}.pem ${var.admin_username}@${aws_eip.example.public_ip}"
+}
+
+output "instance_state" {
+  description = "Current state of the instance"
+  value       = aws_instance.example.instance_state
 }
 
 output "vpc_id" {
