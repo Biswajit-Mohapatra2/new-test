@@ -8,21 +8,22 @@ pipeline {
     }
     
     tools {
-        python 'Python-3.9'
+        python3 'Python-3.9'
     }
     
     stages {
         stage('Setup') {
             steps {
                 sh '''
-                    python -m pip install --upgrade pip
-                    python -m pip install -r requirements.txt
-                    python -m pip install safety bandit owasp-dependency-check-util
+                    python3 -m pip install --upgrade pip
+                    python3 -m pip install -r requirements.txt
+                    python3 -m pip install safety bandit owasp-dependency-check-util coverage pytest pytest-cov
+                    python3 -m pip install sqlmap-python   # For DAST testing
                 '''
             }
         }
 
-        // Software Composition Analysis (SCA)
+        // SCA
         stage('SCA - Safety Check') {
             steps {
                 sh 'safety check -r requirements.txt --json > safety-report.json'
@@ -30,11 +31,22 @@ pipeline {
             }
         }
 
-        // Static Application Security Testing (SAST)
+        // SAST
         stage('SAST - Bandit') {
             steps {
-                sh 'bandit -r . -f json -o bandit-report.json'
+                sh '''
+                    bandit -r . -f json -o bandit-report.json
+                    bandit -r . -f html -o bandit-report.html
+                '''
                 recordIssues(tools: [pyLint(pattern: 'bandit-report.json')])
+                publishHTML([
+                    allowMissing: false,
+                    alwaysLinkToLastBuild: true,
+                    keepAll: true,
+                    reportDir: '.',
+                    reportFiles: 'bandit-report.html',
+                    reportName: 'Bandit Security Report'
+                ])
             }
         }
 
@@ -48,34 +60,6 @@ pipeline {
                     ./codeql/codeql database create codeql-db --language=python
                     ./codeql/codeql database analyze codeql-db --format=sarif-latest --output=codeql-results.sarif
                 '''
-                
-                // Dependency Review
-                withCredentials([string(credentialsId: 'github-token', variable: 'GITHUB_TOKEN')]) {
-                    sh '''
-                        curl -H "Authorization: token ${GITHUB_TOKEN}" \
-                             -H "Accept: application/vnd.github.v3+json" \
-                             "https://api.github.com/repos/owner/repo/dependency-graph/snapshots" \
-                             -d @- << EOF
-                        {
-                            "version": 1,
-                            "ref": "${GIT_COMMIT}",
-                            "detector": {
-                                "name": "jenkins",
-                                "version": "1.0.0"
-                            },
-                            "manifests": {
-                                "requirements.txt": {
-                                    "name": "requirements.txt",
-                                    "file": {
-                                        "source_location": "requirements.txt"
-                                    },
-                                    "resolved": {}
-                                }
-                            }
-                        }
-                        EOF
-                    '''
-                }
             }
         }
 
@@ -83,20 +67,95 @@ pipeline {
         stage('OWASP Dependency Check') {
             steps {
                 dependencyCheck(
-                    additionalArguments: '--scan . --format XML',
+                    additionalArguments: '--scan . --format XML --format HTML',
                     odcInstallation: 'OWASP-Dependency-Check'
                 )
                 dependencyCheckPublisher pattern: 'dependency-check-report.xml'
+                publishHTML([
+                    allowMissing: false,
+                    alwaysLinkToLastBuild: true,
+                    keepAll: true,
+                    reportDir: '.',
+                    reportFiles: 'dependency-check-report.html',
+                    reportName: 'Dependency Check Report'
+                ])
             }
         }
 
-        // Dynamic Application Security Testing (DAST)
+        // Alternative IAST using Coverage and Dynamic Analysis
+        stage('IAST - Coverage & Dynamic Analysis') {
+            steps {
+                script {
+                    // Start application with coverage
+                    sh '''
+                        coverage run -m pytest tests/ --junitxml=test-results.xml
+                        coverage report -m > coverage-report.txt
+                        coverage html -d coverage-html
+                    '''
+                    
+                    // Run basic security tests with coverage
+                    sh '''
+                        # Start application in background with coverage
+                        coverage run app.py &
+                        APP_PID=$!
+                        
+                        # Wait for app to start
+                        sleep 10
+                        
+                        # Run basic security tests
+                        python -c '
+import requests
+import urllib.parse
+
+def test_basic_security():
+    # Test for SQL Injection
+    urls = [
+        "http://localhost:8000/search?q=1%27%20OR%20%271%27=%271",
+        "http://localhost:8000/user?id=1%20OR%201=1",
+    ]
+    
+    for url in urls:
+        response = requests.get(url)
+        if response.status_code == 200 and "error" not in response.text.lower():
+            print(f"Potential SQL Injection vulnerability found at: {url}")
+
+    # Test for XSS
+    xss_payload = "<script>alert(1)</script>"
+    response = requests.get(f"http://localhost:8000/search?q={urllib.parse.quote(xss_payload)}")
+    if xss_payload in response.text:
+        print(f"Potential XSS vulnerability found")
+
+test_basic_security()
+'
+                        
+                        # Kill the application
+                        kill $APP_PID
+                        
+                        # Generate coverage report
+                        coverage report -m > coverage-report.txt
+                        coverage html -d coverage-html
+                    '''
+                    
+                    // Publish coverage report
+                    publishHTML([
+                        allowMissing: false,
+                        alwaysLinkToLastBuild: true,
+                        keepAll: true,
+                        reportDir: 'coverage-html',
+                        reportFiles: 'index.html',
+                        reportName: 'Coverage Report'
+                    ])
+                }
+            }
+        }
+
+        // DAST
         stage('DAST - OWASP ZAP') {
             steps {
                 script {
-                    // Start your application (adjust as needed)
+                    // Start your application
                     sh 'python app.py &'
-                    sleep(time: 30, unit: 'SECONDS')  // Wait for app to start
+                    sleep(time: 30, unit: 'SECONDS')
                     
                     // Run ZAP scan
                     sh '''
@@ -106,9 +165,17 @@ pipeline {
                             -r zap-report.html
                     '''
                     
+                    // Additional SQLMap scan
+                    sh '''
+                        sqlmap -u "http://localhost:8000/?id=1" --batch --random-agent \
+                            --level 1 --risk 1 --output-dir=sqlmap-results
+                    '''
+                    
                     // Kill the application
                     sh 'pkill -f "python app.py"'
                 }
+                
+                // Publish ZAP report
                 publishHTML([
                     allowMissing: false,
                     alwaysLinkToLastBuild: true,
@@ -117,31 +184,13 @@ pipeline {
                     reportFiles: 'zap-report.html',
                     reportName: 'ZAP Security Report'
                 ])
+                
+                // Archive SQLMap results
+                archiveArtifacts artifacts: 'sqlmap-results/**/*', fingerprint: true
             }
         }
 
-        // Interactive Application Security Testing (IAST)
-        stage('IAST - Contrast Security') {
-            environment {
-                CONTRAST_API_KEY = credentials('contrast-api-key')
-                CONTRAST_URL = credentials('contrast-url')
-                CONTRAST_AGENT_PATH = '/opt/contrast/contrast-agent.jar'
-            }
-            steps {
-                sh '''
-                    # Download Contrast Security Agent
-                    curl -L -o contrast-agent.jar ${CONTRAST_URL}/api/v1/agents/default/python \
-                        -H "Authorization: ${CONTRAST_API_KEY}"
-                    
-                    # Run application with Contrast agent
-                    CONTRAST_CONFIG_PATH=/path/to/contrast_security.yaml \
-                    PYTHONPATH=${CONTRAST_AGENT_PATH} \
-                    python app.py
-                '''
-            }
-        }
-
-        // Runtime Application Self-Protection (RASP)
+        // RASP
         stage('RASP - Configure') {
             steps {
                 sh '''
@@ -155,12 +204,27 @@ pipeline {
 
     post {
         always {
-            // Archive security reports
-            archiveArtifacts artifacts: '**/safety-report.json, **/bandit-report.json, **/codeql-results.sarif, **/dependency-check-report.xml, **/zap-report.html', fingerprint: true
+            // Archive all security reports
+            archiveArtifacts artifacts: '''
+                **/safety-report.json,
+                **/bandit-report.json,
+                **/bandit-report.html,
+                **/codeql-results.sarif,
+                **/dependency-check-report.*,
+                **/zap-report.html,
+                **/coverage-report.txt,
+                **/coverage-html/**,
+                **/test-results.xml,
+                **/sqlmap-results/**
+            ''', fingerprint: true
+            
+            // Publish test results
+            junit 'test-results.xml'
             
             // Clean up
             cleanWs()
         }
+        
         failure {
             emailext (
                 subject: "Security Scan Failed: ${currentBuild.fullDisplayName}",
